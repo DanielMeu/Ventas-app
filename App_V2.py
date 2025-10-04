@@ -1,7 +1,11 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
+#import matplotlib
+#matplotlib.use("Agg")
+#import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import date
 from io import StringIO
 import os
@@ -176,55 +180,94 @@ def format_dataframe(df, move_obs_stock=False):
 
 
 
-# =====================
-# CRUD CLIENTES
-# =====================
+# ======================
+# CRUD CLIENTES COMPLETO
+# ======================
 
 def crud_clientes():
+    op = st.radio(
+        "Operación:",
+        ["Ver", "Insertar", "Editar", "Eliminar"],
+        horizontal=True,
+        key="clientes_radio"
+    )
 
-    #st.text('Gestión de Clientes', width='content')
-    
-    op = st.radio("Operación:", ["Ver", "Insertar", "Editar", "Eliminar"], horizontal=True, key="clientes_radio")
-
+    # ======================
+    # VER CLIENTES
+    # ======================
     if op == "Ver":
-#        st.dataframe(fetch_df("SELECT * FROM Clientes"), use_container_width=True)  solo hasta 2025-12-31
-        st.dataframe(fetch_df("SELECT * FROM Clientes"), width="stretch")       # para use_container_width=false  poner: ="content"
+        df_clientes = fetch_df("SELECT * FROM Clientes")
+        
+        if not df_clientes.empty:
+            # Convertir automáticamente columnas numéricas
+            num_cols = ["id_cliente", "Cant_DVtas", "Pcio_Total_DVtas"]
+            for col in num_cols:
+                if col in df_clientes.columns:
+                    df_clientes[col] = pd.to_numeric(df_clientes[col], errors="coerce").fillna(0).astype(int)
 
+        st.dataframe(df_clientes, use_container_width=True)
 
+    # ======================
+    # INSERTAR CLIENTE
+    # ======================
     elif op == "Insertar":
-        c1, c2 = st.columns([2,2])
+        c1, c2 = st.columns([2, 2])
         with c1:
-            nombre = st.text_input("Nombre")
-            domi = st.text_input("Domicilio")
-            telef = st.text_input("Teléfono")
+            nombre = st.text_input("Nombre", key="insert_nombre")
+            domi = st.text_input("Domicilio", key="insert_domi")
+            telef = st.text_input("Teléfono", key="insert_telef")
         with c2:
-            obs = st.text_area("Observaciones")
-            estado = st.selectbox("Estado", ["A", "I"], index=0)
-        if st.button("Guardar Cliente", type="primary"):
-            run_query(
-                """
-                INSERT INTO Clientes (Nomb_cliente, Domi_Cliente, Telef_Cliente, Obs_Cliente, Estado_Cliente)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (nombre, domi, telef, obs, estado),
-            )
-            st.success("Cliente agregado")
+            obs = st.text_area("Observaciones", key="insert_obs")
+            estado = st.selectbox("Estado", ["A", "I"], index=0, key="insert_estado")
 
+        if st.button("Guardar Cliente", type="primary", key="btn_insert_cliente"):
+            if nombre.strip() == "":
+                st.warning("El nombre del cliente no puede estar vacío")
+            else:
+                run_query(
+                    """
+                    INSERT INTO Clientes (Nomb_cliente, Domi_Cliente, Telef_Cliente, Obs_Cliente, Estado_Cliente)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (nombre, domi, telef, obs, estado),
+                )
+                st.success("Cliente agregado")
+
+    # ======================
+    # EDITAR CLIENTE
+    # ======================
     elif op == "Editar":
         df = fetch_df("SELECT * FROM Clientes ORDER BY Nomb_cliente")
-        labels, ids = df_to_select_options(df, "id_cliente", ["Nomb_cliente"]) if not df.empty else (["<sin clientes>"],[None])
-        id_sel = st.selectbox("Cliente a editar", options=ids, format_func=lambda x: labels[ids.index(x)] if x in ids else "<sin clientes>")
+        if not df.empty:
+            df["id_cliente"] = pd.to_numeric(df["id_cliente"], errors="coerce").fillna(0).astype(int)
+            labels = df["Nomb_cliente"].tolist()
+            ids = df["id_cliente"].tolist()
+        else:
+            labels, ids = ["<sin clientes>"], [None]
+
+        id_sel = st.selectbox(
+            "Cliente a editar",
+            options=ids,
+            format_func=lambda x: labels[ids.index(x)] if x in ids else "<sin clientes>",
+            key="edit_select_cliente"
+        )
+
         if id_sel:
             cliente = df[df["id_cliente"] == id_sel].iloc[0]
-            c1, c2 = st.columns([2,2])
+            c1, c2 = st.columns([2, 2])
             with c1:
-                nombre = st.text_input("Nombre", cliente["Nomb_cliente"])
-                domi = st.text_input("Domicilio", cliente["Domi_Cliente"])
-                telef = st.text_input("Teléfono", cliente["Telef_Cliente"])
+                nombre = st.text_input("Nombre", cliente["Nomb_cliente"], key="edit_nombre")
+                domi = st.text_input("Domicilio", cliente["Domi_Cliente"], key="edit_domi")
+                telef = st.text_input("Teléfono", cliente["Telef_Cliente"], key="edit_telef")
             with c2:
-                obs = st.text_area("Observaciones", cliente["Obs_Cliente"])
-                estado = st.selectbox("Estado", ["A", "I"], index=0 if cliente["Estado_Cliente"]=="A" else 1)
-            if st.button("Actualizar Cliente", type="primary"):
+                obs = st.text_area("Observaciones", cliente["Obs_Cliente"], key="edit_obs")
+                estado = st.selectbox(
+                    "Estado",
+                    ["A", "I"],
+                    index=0 if cliente["Estado_Cliente"] == "A" else 1,
+                    key="edit_estado"
+                )
+            if st.button("Actualizar Cliente", type="primary", key="btn_update_cliente"):
                 run_query(
                     """
                     UPDATE Clientes
@@ -235,11 +278,26 @@ def crud_clientes():
                 )
                 st.success("Cliente actualizado")
 
+    # ======================
+    # ELIMINAR CLIENTE
+    # ======================
     elif op == "Eliminar":
         df = fetch_df("SELECT id_cliente, Nomb_cliente FROM Clientes ORDER BY Nomb_cliente")
-        labels, ids = df_to_select_options(df, "id_cliente", ["Nomb_cliente"]) if not df.empty else (["<sin clientes>"],[None])
-        id_sel = st.selectbox("Cliente a eliminar", options=ids, format_func=lambda x: labels[ids.index(x)] if x in ids else "<sin clientes>")
-        if id_sel and st.button("Eliminar Cliente", type="secondary"):
+        if not df.empty:
+            df["id_cliente"] = pd.to_numeric(df["id_cliente"], errors="coerce").fillna(0).astype(int)
+            labels = df["Nomb_cliente"].tolist()
+            ids = df["id_cliente"].tolist()
+        else:
+            labels, ids = ["<sin clientes>"], [None]
+
+        id_sel = st.selectbox(
+            "Cliente a eliminar",
+            options=ids,
+            format_func=lambda x: labels[ids.index(x)] if x in ids else "<sin clientes>",
+            key="delete_select_cliente"
+        )
+
+        if id_sel and st.button("Eliminar Cliente", type="secondary", key="btn_delete_cliente"):
             run_query("DELETE FROM Clientes WHERE id_cliente=?", (id_sel,))
             st.warning("Cliente eliminado")
 
@@ -1251,19 +1309,34 @@ def dashboard_ventas():
     # 1) Ventas Totales por Mes (Gráfico de Líneas + CSV)
     # ======================
     st.subheader("Ventas Totales por Mes")
+
     ventas_mes = df.groupby("Mes")["Pcio_Total_DVtas"].sum().reset_index()
 
-    fig, ax = plt.subplots()
-    ax.plot(ventas_mes["Mes"], ventas_mes["Pcio_Total_DVtas"], marker="o")
-    ax.set_title("Ventas Totales por Mes")
-    ax.set_xlabel("Mes")
-    ax.set_ylabel("Total Ventas ($)")
-    plt.xticks(rotation=45)
-    st.pyplot(fig)
+    fig = px.line(
+        ventas_mes,
+        x="Mes",
+        y="Pcio_Total_DVtas",
+        markers=True,
+        title="Ventas Totales por Mes"
+    )
 
+    fig.update_layout(
+        xaxis_title="Mes",
+        yaxis_title="Total Ventas ($)",
+        xaxis_tickangle=-45
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Botón para descargar CSV
     csv_mes = StringIO()
     ventas_mes.to_csv(csv_mes, index=False)
-    st.download_button("Descargar CSV Ventas por Mes", csv_mes.getvalue(), "ventas_por_mes.csv", "text/csv")
+    st.download_button(
+        "Descargar CSV Ventas por Mes",
+        csv_mes.getvalue(),
+        "ventas_por_mes.csv",
+        "text/csv"
+    )
 
     # ======================
     # 2) Evolución de Ingreso Neto por Mes (Línea + Barras Apiladas + CSV)
@@ -1275,45 +1348,41 @@ def dashboard_ventas():
 
     ingreso_mes = df.groupby("Mes").agg({
         "Pcio_Total_DVtas": "sum",
-        "Pcio_Costo_Unit_DVtas": "sum",  # ojo, vamos a corregir abajo
         "Cant_DVtas": "sum",
         "Ingreso_Neto": "sum"
     }).reset_index()
 
-    # Calcular costos totales correctamente
-    #costos_mes = df.groupby("Mes").apply(lambda x: (x["Pcio_Costo_Unit_DVtas"] * x["Cant_DVtas"]).sum()).reset_index(name="Total_Costos")
-    #ingreso_mes = ingreso_mes.merge(costos_mes, on="Mes", how="left")
-
-    # Calculamos costos por mes
+    # Calcular costos totales
     costos_mes = (
-    df.assign(Costo_Total=df["Pcio_Costo_Unit_DVtas"] * df["Cant_DVtas"])
-      .groupby("Mes", as_index=False)["Costo_Total"].sum()
-      .rename(columns={"Costo_Total": "Total_Costos"})
-                )
-
-    # Le agregamos esa info a ingreso_mes
+        df.assign(Costo_Total=df["Pcio_Costo_Unit_DVtas"] * df["Cant_DVtas"])
+        .groupby("Mes", as_index=False)["Costo_Total"].sum()
+        .rename(columns={"Costo_Total": "Total_Costos"})
+    )
     ingreso_mes = ingreso_mes.merge(costos_mes, on="Mes", how="left")
 
     # Línea de ingreso neto
-    fig6, ax6 = plt.subplots()
-    ax6.plot(ingreso_mes["Mes"], ingreso_mes["Ingreso_Neto"], marker="o", color="green", label="Ingreso Neto")
-    ax6.set_title("Ingreso Neto por Mes (Línea)")
-    ax6.set_xlabel("Mes")
-    ax6.set_ylabel("Ingreso Neto ($)")
-    plt.xticks(rotation=45)
-    ax6.legend()
-    st.pyplot(fig6)
+    fig6 = px.line(
+        ingreso_mes,
+        x="Mes",
+        y="Ingreso_Neto",
+        markers=True,
+        title="Ingreso Neto por Mes (Línea)"
+    )
+    fig6.update_layout(xaxis_title="Mes", yaxis_title="Ingreso Neto ($)", xaxis_tickangle=-45)
+    st.plotly_chart(fig6, use_container_width=True)
 
     # Barras apiladas Ventas vs Costos
-    fig7, ax7 = plt.subplots()
-    ax7.bar(ingreso_mes["Mes"], ingreso_mes["Pcio_Total_DVtas"], label="Ventas", color="skyblue")
-    ax7.bar(ingreso_mes["Mes"], ingreso_mes["Total_Costos"], label="Costos", color="salmon")
-    ax7.set_title("Ventas vs Costos por Mes (Barras Apiladas)")
-    ax7.set_xlabel("Mes")
-    ax7.set_ylabel("Montos ($)")
-    plt.xticks(rotation=45)
-    ax7.legend()
-    st.pyplot(fig7)
+    fig7 = go.Figure()
+    fig7.add_bar(x=ingreso_mes["Mes"], y=ingreso_mes["Pcio_Total_DVtas"], name="Ventas", marker_color="skyblue")
+    fig7.add_bar(x=ingreso_mes["Mes"], y=ingreso_mes["Total_Costos"], name="Costos", marker_color="salmon")
+    fig7.update_layout(
+        barmode="stack",
+        title="Ventas vs Costos por Mes (Barras Apiladas)",
+        xaxis_title="Mes",
+        yaxis_title="Montos ($)",
+        xaxis_tickangle=-45
+    )
+    st.plotly_chart(fig7, use_container_width=True)
 
     # Descargar CSV
     csv_ing = StringIO()
@@ -1325,16 +1394,16 @@ def dashboard_ventas():
         "text/csv",
     )
 
-
-
     # ======================
     # 3) Rendimiento de Ventas (Venta vs Costo - Torta)
     # ======================
     st.subheader("Rendimiento de Ventas (Venta vs Costo)")
-    fig2, ax2 = plt.subplots()
-    ax2.pie([total_ventas, total_costos], labels=["Venta", "Costo"], autopct="%1.1f%%", startangle=90)
-    ax2.set_title("Proporción Ventas vs Costos")
-    st.pyplot(fig2)
+    fig2 = px.pie(
+        names=["Venta", "Costo"],
+        values=[total_ventas, total_costos],
+        title="Proporción Ventas vs Costos"
+    )
+    st.plotly_chart(fig2, use_container_width=True)
 
     # ======================
     # 4) Ventas por Producto (Barras + CSV)
@@ -1342,13 +1411,14 @@ def dashboard_ventas():
     st.subheader("Ventas por Producto")
     ventas_producto = df.groupby("Producto")["Pcio_Total_DVtas"].sum().reset_index()
 
-    fig3, ax3 = plt.subplots()
-    ax3.bar(ventas_producto["Producto"], ventas_producto["Pcio_Total_DVtas"])
-    ax3.set_title("Ventas Totales por Producto")
-    ax3.set_xlabel("Producto")
-    ax3.set_ylabel("Total Ventas ($)")
-    plt.xticks(rotation=45, ha="right")
-    st.pyplot(fig3)
+    fig3 = px.bar(
+        ventas_producto,
+        x="Producto",
+        y="Pcio_Total_DVtas",
+        title="Ventas Totales por Producto"
+    )
+    fig3.update_layout(xaxis_title="Producto", yaxis_title="Total Ventas ($)", xaxis_tickangle=-45)
+    st.plotly_chart(fig3, use_container_width=True)
 
     csv_prod = StringIO()
     ventas_producto.to_csv(csv_prod, index=False)
@@ -1360,13 +1430,15 @@ def dashboard_ventas():
     st.subheader("Rentabilidad por Producto (Venta - Costo)")
     rentab_prod = df.groupby("Producto")["Ingreso_Neto"].sum().reset_index()
 
-    fig4, ax4 = plt.subplots()
-    ax4.bar(rentab_prod["Producto"], rentab_prod["Ingreso_Neto"], color="green")
-    ax4.set_title("Ingreso Neto por Producto")
-    ax4.set_xlabel("Producto")
-    ax4.set_ylabel("Ingreso Neto ($)")
-    plt.xticks(rotation=45, ha="right")
-    st.pyplot(fig4)
+    fig4 = px.bar(
+        rentab_prod,
+        x="Producto",
+        y="Ingreso_Neto",
+        title="Ingreso Neto por Producto",
+        color_discrete_sequence=["green"]
+    )
+    fig4.update_layout(xaxis_title="Producto", yaxis_title="Ingreso Neto ($)", xaxis_tickangle=-45)
+    st.plotly_chart(fig4, use_container_width=True)
 
     csv_rentab = StringIO()
     rentab_prod.to_csv(csv_rentab, index=False)
@@ -1377,14 +1449,18 @@ def dashboard_ventas():
     # ======================
     st.subheader("Distribución de Clientes (Activos vs Inactivos)")
     if not df_clientes.empty:
-        fig5, ax5 = plt.subplots()
-        ax5.pie(df_clientes["Cantidad"], labels=df_clientes["Estado_Cliente"], autopct="%1.1f%%", startangle=90)
-        ax5.set_title("Clientes Activos (A) vs Inactivos (I)")
-        st.pyplot(fig5)
+        fig5 = px.pie(
+            df_clientes,
+            names="Estado_Cliente",
+            values="Cantidad",
+            title="Clientes Activos (A) vs Inactivos (I)"
+        )
+        st.plotly_chart(fig5, use_container_width=True)
 
         csv_clientes = StringIO()
         df_clientes.to_csv(csv_clientes, index=False)
         st.download_button("Descargar CSV Clientes Activos/Inactivos", csv_clientes.getvalue(), "clientes_activos_inactivos.csv", "text/csv")
+
 
 #===========================
 # HERRAMIENTAS
