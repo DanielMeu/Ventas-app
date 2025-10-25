@@ -1,4 +1,0 @@
-Streamlit
-plotly
-numpy
-pandas
