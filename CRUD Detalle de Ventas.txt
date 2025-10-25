@@ -1,0 +1,170 @@
+
+# =====================
+# CRUD DETALLEVENTAS (sin cabecera Ventas)
+# =====================
+
+def crud_detalleventas():
+
+    #st.text('Gestión de Detalle de Ventas', width='content')
+
+    # Aviso si aún existe la columna id_venta_Vtas
+    if column_exists("DetalleVentas", "id_venta_Vtas"):
+        st.markdown(
+            """
+            <div class='warn'>Aviso: tu tabla <b>DetalleVentas</b> aún tiene la columna <b>id_venta_Vtas</b>.
+            Esta app la ignora, pero te conviene eliminarla del esquema y agregar <b>Color_DVtas</b> (TEXT).</div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    op = st.radio("Operación:", ["Ver", "Insertar", "Editar", "Eliminar"], horizontal=True)
+
+    if op == "Ver":
+        # Vista enriquecida
+        base_cols = [
+            "d.id_detalle_DVtas", "d.Fecha_DVtas", "cli.Nomb_cliente AS Cliente",
+            "s.Descrip_Stock AS Producto", "s.Talle_Stock AS TalleProducto",
+            "d.Talle_DVtas AS TalleVenta", "d.Color_DVtas AS Color",
+            "d.Cant_DVtas", "d.Pcio_Unitario_DVtas", "d.Pcio_Total_DVtas",
+            "d.Pcio_Costo_Unit_DVtas", "d.Obs_DVtas", "d.Estado_DVtas"
+        ]
+        sql = f"""
+            SELECT {', '.join(base_cols)}
+            FROM DetalleVentas d
+            LEFT JOIN Clientes cli ON cli.id_cliente = d.id_Cliente
+            LEFT JOIN Stock s ON s.id_producto_Stock = d.id_producto_Stock
+            ORDER BY d.Fecha_DVtas DESC, d.id_detalle_DVtas DESC
+        """
+        st.dataframe(fetch_df(sql), width="stretch")
+
+    else:
+        # Datos para selects
+        df_cli = fetch_df("SELECT id_cliente, Nomb_cliente FROM Clientes ORDER BY Nomb_cliente")
+        cli_labels, cli_ids = df_to_select_options(df_cli, "id_cliente", ["Nomb_cliente"]) if not df_cli.empty else (["<sin clientes>"],[None])
+
+        df_prod = fetch_df("SELECT id_producto_Stock, Descrip_Stock, Talle_Stock, Pcio_Vta_Stock, Pcio_Costo_Stock FROM Stock ORDER BY Descrip_Stock")
+        prod_labels, prod_ids = df_to_select_options(df_prod, "id_producto_Stock", ["Descrip_Stock", "Talle_Stock"]) if not df_prod.empty else (["<sin productos>"],[None])
+
+        def color_options(product_id: int):
+            d = fetch_df("SELECT Color_colores FROM Colores_Stock WHERE id_producto_Stock=? ORDER BY Color_colores", (product_id,))
+            if d.empty:
+                return ["<sin colores>"]
+            return d["Color_colores"].astype(str).tolist()
+
+        if op == "Insertar":
+            c1, c2, c3 = st.columns([2,2,2])
+            with c1:
+                # Mostramos como date, pero guardamos como string ISO
+                fecha = st.date_input("Fecha", value=date.today())
+                id_cli = st.selectbox("Cliente", options=cli_ids, format_func=lambda x: cli_labels[cli_ids.index(x)] if x in cli_ids else "<sin clientes>")
+            with c2:
+                id_prod = st.selectbox("Producto", options=prod_ids, format_func=lambda x: prod_labels[prod_ids.index(x)] if x in prod_ids else "<sin productos>")
+                talle_vta = st.text_input("Talle (venta) — opcional")
+            with c3:
+                colors = color_options(id_prod) if id_prod else ["<sin colores>"]
+                color_sel = st.selectbox("Color", options=colors)
+
+            # Defaults de precios
+            pcio_unit_default = 0.0
+            pcio_costo_default = 0.0
+            if id_prod:
+                rowp = df_prod[df_prod["id_producto_Stock"] == id_prod].iloc[0]
+                pcio_unit_default = float(rowp["Pcio_Vta_Stock"]) or 0.0
+                pcio_costo_default = float(rowp["Pcio_Costo_Stock"]) or 0.0
+
+            c4, c5, c6 = st.columns([2,2,2])
+            with c4:
+                cant = st.number_input("Cantidad", min_value=1, step=1, value=1)
+            with c5:
+                pcio_unit = st.number_input("Precio Unitario", min_value=0.0, step=0.1, value=pcio_unit_default)
+            with c6:
+                pcio_costo = st.number_input("Costo Unitario", min_value=0.0, step=0.1, value=pcio_costo_default)
+
+            pcio_total = cant * pcio_unit
+            st.info(f"Total: {pcio_total:.2f}")
+            obs = st.text_area("Observaciones")
+            estado = st.selectbox("Estado", ["A", "I"], index=0)
+
+            if st.button("Guardar Detalle", type="primary"):
+                fecha_str = fecha.isoformat()  # conversión a string ISO
+                cols = [
+                    "Fecha_DVtas", "id_Cliente", "id_producto_Stock", "Color_DVtas",
+                    "Talle_DVtas", "Cant_DVtas", "Pcio_Unitario_DVtas", "Pcio_Total_DVtas",
+                    "Pcio_Costo_Unit_DVtas", "Obs_DVtas", "Estado_DVtas"
+                ]
+                qmarks = ",".join(["?"] * len(cols))
+                run_query(
+                    f"INSERT INTO DetalleVentas ({','.join(cols)}) VALUES ({qmarks})",
+                    (fecha_str, id_cli, id_prod, color_sel, talle_vta, int(cant), float(pcio_unit), float(pcio_total), float(pcio_costo), obs, estado),
+                )
+                # Descuenta stock del color (si existe)
+                if id_prod and color_sel and color_sel != "<sin colores>":
+                    run_query(
+                        """
+                        UPDATE Colores_Stock
+                        SET Cant_Stock_Colores = MAX(0, Cant_Stock_Colores - ?)
+                        WHERE id_producto_Stock=? AND Color_colores=?
+                        """,
+                        (int(cant), id_prod, color_sel),
+                    )
+                st.success("Detalle de venta agregado")
+
+        elif op == "Editar":
+            df = fetch_df("SELECT * FROM DetalleVentas ORDER BY id_detalle_DVtas DESC")
+            if df.empty:
+                st.info("No hay detalles para editar")
+                return
+            ids = df["id_detalle_DVtas"].tolist()
+            id_sel = st.selectbox("Detalle a editar (ID)", options=ids)
+            det = df[df["id_detalle_DVtas"] == id_sel].iloc[0]
+
+            c1, c2, c3 = st.columns([2,2,2])
+            with c1:
+                fecha_val = pd.to_datetime(det["Fecha_DVtas"]).date()  # string ? date
+                fecha = st.date_input("Fecha", value=fecha_val)
+                id_cli = st.selectbox("Cliente", options=cli_ids, index=(cli_ids.index(det["id_Cliente"]) if det["id_Cliente"] in cli_ids else 0), format_func=lambda x: cli_labels[cli_ids.index(x)] if x in cli_ids else "<sin clientes>")
+            with c2:
+                id_prod = st.selectbox("Producto", options=prod_ids, index=(prod_ids.index(det["id_producto_Stock"]) if det["id_producto_Stock"] in prod_ids else 0), format_func=lambda x: prod_labels[prod_ids.index(x)] if x in prod_ids else "<sin productos>")
+                talle_vta = st.text_input("Talle (venta)", det.get("Talle_DVtas", ""))
+            with c3:
+                colors = color_options(id_prod) if id_prod else ["<sin colores>"]
+                current_color = det.get("Color_DVtas", "") if isinstance(det, pd.Series) else ""
+                idx_color = colors.index(current_color) if current_color in colors else 0
+                color_sel = st.selectbox("Color", options=colors, index=idx_color)
+
+            c4, c5, c6 = st.columns([2,2,2])
+            with c4:
+                cant = st.number_input("Cantidad", min_value=1, step=1, value=int(det["Cant_DVtas"]))
+            with c5:
+                pcio_unit = st.number_input("Precio Unitario", min_value=0.0, step=0.1, value=float(det["Pcio_Unitario_DVtas"]))
+            with c6:
+                pcio_costo = st.number_input("Costo Unitario", min_value=0.0, step=0.1, value=float(det["Pcio_Costo_Unit_DVtas"]))
+
+            pcio_total = cant * pcio_unit
+            st.info(f"Total: {pcio_total:.2f}")
+            obs = st.text_area("Observaciones", det.get("Obs_DVtas", ""))
+            estado = st.selectbox("Estado", ["A", "I"], index=0 if det.get("Estado_DVtas", "A") == "A" else 1)
+
+            if st.button("Actualizar Detalle", type="primary"):
+                fecha_str = fecha.isoformat()  # conversión a string ISO
+                run_query(
+                    """
+                    UPDATE DetalleVentas
+                    SET Fecha_DVtas=?, id_Cliente=?, id_producto_Stock=?, Color_DVtas=?, Talle_DVtas=?,
+                        Cant_DVtas=?, Pcio_Unitario_DVtas=?, Pcio_Total_DVtas=?, Pcio_Costo_Unit_DVtas=?,
+                        Obs_DVtas=?, Estado_DVtas=?
+                    WHERE id_detalle_DVtas=?
+                    """,
+                    (fecha_str, id_cli, id_prod, color_sel, talle_vta, int(cant), float(pcio_unit), float(pcio_total), float(pcio_costo), obs, estado, id_sel),
+                )
+                st.success("Detalle actualizado")
+
+        elif op == "Eliminar":
+            df = fetch_df("SELECT id_detalle_DVtas FROM DetalleVentas ORDER BY id_detalle_DVtas DESC")
+            if df.empty:
+                st.info("No hay registros para eliminar")
+                return
+            id_sel = st.selectbox("Detalle a eliminar (ID)", options=df["id_detalle_DVtas"].tolist())
+            if id_sel and st.button("Eliminar Detalle", type="secondary"):
+                run_query("DELETE FROM DetalleVentas WHERE id_detalle_DVtas=?", (id_sel,))
+                st.warning("Detalle eliminado")
