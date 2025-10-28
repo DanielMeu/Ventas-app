@@ -22,6 +22,10 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "ventas.db")  # Para uso con s
 print("Ruta absoluta de DB_PATH:", os.path.abspath(DB_PATH))        ##  eliminar
 print("Existe la base de datos?:", os.path.exists(DB_PATH))         ##  eliminar
 
+st.write(f"Ruta actual: {os.getcwd()}")                             ##  eliminar
+st.write(f"Ruta DB: {DB_PATH}")                                     ##  eliminar
+st.write(f"Existe DB: {os.path.exists(DB_PATH)}")                   ##  eliminar
+
 st.set_page_config(page_title="Sistema de Ventas", layout="wide")
 st.title("Sistema de Gestión de Ventas")
 
