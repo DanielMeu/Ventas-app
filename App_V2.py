@@ -18,6 +18,10 @@ import datetime
 #DB_PATH = "ventas.db"  # Cambiá a la ruta en tu Google Drive si sincronizás el archivo
 DB_PATH = os.path.join(os.path.dirname(__file__), "ventas.db")  # Para uso con streamlit cloud
 
+
+print("Ruta absoluta de DB_PATH:", os.path.abspath(DB_PATH))        ##  eliminar
+print("Existe la base de datos?:", os.path.exists(DB_PATH))         ##  eliminar
+
 st.set_page_config(page_title="Sistema de Ventas", layout="wide")
 st.title("Sistema de Gestión de Ventas")
 
