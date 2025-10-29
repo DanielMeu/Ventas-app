@@ -15,7 +15,7 @@ import datetime
 # ======================
 #  Versión del código
 # ======================
-st.caption("App_V2.py   V 2.01 : 28-10-2025 21:20")
+st.caption("App_V2.py   V:2.02 : 28-10-2025 22:10")
 
 # =====================
 # CONFIGURACIÓN
@@ -1571,12 +1571,8 @@ elif menu == "Herramientas":
 
 elif menu == "Salir":
     header_placeholder.markdown("<div class='app-header'>Salir</div>", unsafe_allow_html=True)
-    try:
-        conn = get_connection()
-        conn.close()
-    except Exception:
-        pass
     st.info("Base cerrada. Podés cerrar esta pestaña.")
     st.stop()
+
 
 
