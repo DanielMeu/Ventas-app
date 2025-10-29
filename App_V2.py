@@ -12,6 +12,11 @@ import os
 import shutil
 import datetime
 
+# ======================
+#  Versión del código
+# ======================
+st.caption("App_V2.py   V 2.01 : 28-10-2025 21:20")
+
 # =====================
 # CONFIGURACIÓN
 # =====================
@@ -87,7 +92,6 @@ def run_query(sql: str, params: tuple | list = ()):     # INSERT/UPDATE/DELETE
     cur = conn.cursor()
     cur.execute(sql, params)
     conn.commit()
-    conn.close()
     #  return cur.lastrowid
 
 
@@ -96,7 +100,6 @@ def fetch_df(sql: str, params: tuple | list = ()):  # SELECT a DataFrame
     try:
         conn = get_connection()
         df = pd.read_sql_query(sql, conn, params=params)
-        conn.close()
         return df
     except Exception as e:
         st.error(f"Error al ejecutar consulta SQL: {e}")
