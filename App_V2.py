@@ -15,16 +15,12 @@ import datetime
 # =====================
 # CONFIGURACIÓN
 # =====================
+# Ruta de la base de datos
 #DB_PATH = "ventas.db"  # Cambiá a la ruta en tu Google Drive si sincronizás el archivo
 DB_PATH = os.path.join(os.path.dirname(__file__), "ventas.db")  # Para uso con streamlit cloud
 
 
-print("Ruta absoluta de DB_PATH:", os.path.abspath(DB_PATH))        ##  eliminar
-print("Existe la base de datos?:", os.path.exists(DB_PATH))         ##  eliminar
 
-st.write(f"Ruta actual: {os.getcwd()}")                             ##  eliminar
-st.write(f"Ruta DB: {DB_PATH}")                                     ##  eliminar
-st.write(f"Existe DB: {os.path.exists(DB_PATH)}")                   ##  eliminar
 
 st.set_page_config(page_title="Sistema de Ventas", layout="wide")
 st.title("Sistema de Gestión de Ventas")
@@ -78,30 +74,41 @@ if not os.path.exists(BACKUP_DIR):
 # =====================
 # UTILIDADES DB
 # =====================
+# Conexión cacheada (segura para Streamlit Cloud)
 @st.cache_resource(show_spinner=False)
 def get_connection():
     # check_same_thread=False permite usar la conexión en hilos de Streamlit
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 
-def run_query(sql: str, params: tuple | list = ()):  # INSERT/UPDATE/DELETE
+# Consultas que modifican la base (INSERT/UPDATE/DELETE)
+def run_query(sql: str, params: tuple | list = ()):     # INSERT/UPDATE/DELETE
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(sql, params)
     conn.commit()
-    return cur.lastrowid
+    conn.close()
+    #  return cur.lastrowid
 
-'''
+
+# Consultas SELECT → DataFrame
 def fetch_df(sql: str, params: tuple | list = ()):  # SELECT a DataFrame
-    conn = get_connection()
-    df = pd.read_sql_query(sql, conn, params=params)
-    return df
-'''
-    
+    try:
+        conn = get_connection()
+        df = pd.read_sql_query(sql, conn, params=params)
+        conn.close()
+        return df
+    except Exception as e:
+        st.error(f"Error al ejecutar consulta SQL: {e}")
+        return pd.DataFrame()
+
+
+'''  
 def fetch_df(sql: str, params: tuple | list = ()):          # SELECT a DataFrame
     with sqlite3.connect(DB_PATH, check_same_thread=False) as conn:
         df = pd.read_sql_query(sql, conn, params=params)
         return df
+'''
 
 # Helpers de listas (id -> nombre)
 def df_to_select_options(df: pd.DataFrame, id_col: str, label_cols: list[str]):
