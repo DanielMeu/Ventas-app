@@ -15,17 +15,27 @@ import datetime
 # ======================
 #  Versión del código
 # ======================
-st.caption("App_V2.py   V:2.02 : 28-10-2025 22:10")
+st.caption("App_V2.py   V:2.03 : 03-11-2025 20:10")
 
 # =====================
 # CONFIGURACIÓN
 # =====================
 # Ruta de la base de datos
 #DB_PATH = "ventas.db"  # Cambiá a la ruta en tu Google Drive si sincronizás el archivo
-DB_PATH = os.path.join(os.path.dirname(__file__), "ventas.db")  # Para uso con streamlit cloud
+#DB_PATH = os.path.join(os.path.dirname(__file__), "ventas.db")  # Para uso con streamlit cloud
 
+# Ruta absoluta a la base de datos (misma carpeta que App_V2.py)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "Ventas.db")
 
+# Carpeta donde se guardan los backups
+#BACKUP_DIR = os.path.join(BASE_DIR, "backups")
+#os.makedirs(BACKUP_DIR, exist_ok=True)
 
+# Carpeta donde guardamos los backups
+BACKUP_DIR = os.path.join(BASE_DIR, "backups")
+if not os.path.exists(BACKUP_DIR):
+    os.makedirs(BACKUP_DIR, exist_ok=True)
 
 st.set_page_config(page_title="Sistema de Ventas", layout="wide")
 st.title("Sistema de Gestión de Ventas")
@@ -71,10 +81,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Carpeta donde guardamos los backups
-BACKUP_DIR = "backups"
-if not os.path.exists(BACKUP_DIR):
-    os.makedirs(BACKUP_DIR)
+
 
 # =====================
 # UTILIDADES DB
@@ -157,6 +164,9 @@ def column_exists(table: str, col: str) -> bool:
 # ==========================
 def backup_db():
     """Genera una copia de seguridad de Ventas.db"""
+    if not os.path.exists(DB_PATH):
+        raise FileNotFoundError(f"No se encontró la base de datos en {DB_PATH}")
+    
     fecha = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_file = os.path.join(BACKUP_DIR, f"Ventas_{fecha}.db")
     shutil.copy2("Ventas.db", backup_file)
@@ -167,7 +177,11 @@ def restore_db(backup_file):
     if os.path.exists(backup_file):
         shutil.copy2(backup_file, "Ventas.db")
         return True
-    return False
+    else:
+        print(f"Archivo de backup no encontrado: {backup_file}")
+        return False
+    
+
 
 # ===============================
 # FUNCIONES DE EDICION DE PRECIOS
