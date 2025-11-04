@@ -15,7 +15,7 @@ import datetime
 # ======================
 #  Versión del código
 # ======================
-st.caption("App_V2.py   V:2.03 : 03-11-2025 20:10")
+st.caption("App_V2.py   V:2.03.01 : 03-11-2025 20:10")
 
 # =====================
 # CONFIGURACIÓN
@@ -36,6 +36,7 @@ DB_PATH = os.path.join(BASE_DIR, "Ventas.db")
 BACKUP_DIR = os.path.join(BASE_DIR, "backups")
 if not os.path.exists(BACKUP_DIR):
     os.makedirs(BACKUP_DIR, exist_ok=True)
+
 
 st.set_page_config(page_title="Sistema de Ventas", layout="wide")
 st.title("Sistema de Gestión de Ventas")
@@ -162,6 +163,7 @@ def column_exists(table: str, col: str) -> bool:
 # ==========================
 # FUNCIONES DE B_UP Y RESORE
 # ==========================
+'''
 def backup_db():
     """Genera una copia de seguridad de Ventas.db"""
     if not os.path.exists(DB_PATH):
@@ -171,16 +173,69 @@ def backup_db():
     backup_file = os.path.join(BACKUP_DIR, f"Ventas_{fecha}.db")
     shutil.copy2("Ventas.db", backup_file)
     return backup_file
+'''
+# ==========================
+# FUNCIÓN DE BACKUP
+# ==========================
+def backup_db():
+    """Genera una copia de seguridad de la base Ventas.db (detecta la ruta real usada por SQLite)"""
+    try:
+        # 1️⃣ Detectar la ruta real del archivo SQLite
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        cursor = conn.execute("PRAGMA database_list;")
+        db_info = cursor.fetchone()
+        real_db_path = db_info[2]  # ruta absoluta real
+        conn.close()
 
+        if not os.path.exists(real_db_path):
+            raise FileNotFoundError(f"No se encontró la base de datos en {real_db_path}")
+
+        # 2️⃣ Crear nombre único de backup
+        fecha = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = os.path.join(BACKUP_DIR, f"Ventas_{fecha}.db")
+
+        # 3️⃣ Copiar la base real
+        shutil.copy2(real_db_path, backup_file)
+
+        # 4️⃣ (Opcional) mensaje visual si estás en Streamlit
+        st.success(f"✅ Backup generado correctamente: {os.path.basename(backup_file)}")
+
+        return backup_file
+
+    except Exception as e:
+        st.error(f"❌ Error al generar backup: {e}")
+        raise
+
+
+# ==========================
+# FUNCIÓN DE RESTORE
+# ==========================
 def restore_db(backup_file):
-    """Restaura Ventas.db desde un backup"""
-    if os.path.exists(backup_file):
-        shutil.copy2(backup_file, "Ventas.db")
+    """Restaura Ventas.db desde un archivo de backup"""
+    try:
+        if not os.path.exists(backup_file):
+            st.error(f"Archivo de backup no encontrado: {backup_file}")
+            return False
+
+        # 1️⃣ Obtener la ruta real de la base actual (para reemplazarla correctamente)
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        cursor = conn.execute("PRAGMA database_list;")
+        db_info = cursor.fetchone()
+        real_db_path = db_info[2]
+        conn.close()
+
+        if not os.path.exists(real_db_path):
+            st.warning("No se encontró la base actual. Se creará una nueva al restaurar.")
+
+        # 2️⃣ Copiar el backup sobre la base real
+        shutil.copy2(backup_file, real_db_path)
+
+        st.success("✅ Base de datos restaurada correctamente.")
         return True
-    else:
-        print(f"Archivo de backup no encontrado: {backup_file}")
+
+    except Exception as e:
+        st.error(f"❌ Error al restaurar base: {e}")
         return False
-    
 
 
 # ===============================
